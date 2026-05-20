@@ -2,6 +2,7 @@ from flask import jsonify, request
 
 from . import app, db
 from .models import Opinion
+from .views import random_opinion
 
 
 @app.route('/api/opinions/', methods=['GET'])
@@ -39,7 +40,7 @@ def update_opinion(id):
 
     db.session.commit()
 
-    return jsonify({'opinion': opinion.to_dict()}), 200
+    return jsonify({'opinion': opinion.to_dict()}), 201
 
 
 @app.route('/api/opinions/<int:id>/', methods=['DELETE'])
@@ -50,3 +51,9 @@ def delete_opinion(id):
     db.session.commit()
 
     return '', 204
+
+
+@app.route('/api/get-random-opinion/', methods=['GET'])
+def get_random_opinion():
+    opinion = random_opinion()
+    return jsonify({'opinion': opinion.to_dict()}), 200
