@@ -9,4 +9,4 @@ app.config.from_object('settings')
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-from . import models, views, error_handlers, cli_commands  # noqa
+from . import models, api_views, views, error_handlers, cli_commands  # noqa
