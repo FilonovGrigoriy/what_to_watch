@@ -35,7 +35,9 @@ def add_opinion():
 
 @app.route('/api/opinions/<int:id>/', methods=['GET'])
 def get_opinion(id):
-    opinion = Opinion.query.get_or_404(id)
+    opinion = Opinion.query.get(id)
+    if opinion is None:
+        raise InvalidAPIUsage('Мнение с указанным id не найдено', 404)
     return jsonify({'opinion': opinion.to_dict()}), 200
 
 
@@ -46,12 +48,15 @@ def update_opinion(id):
     if data is None:
         raise InvalidAPIUsage('Отсутствует тело запроса')
 
+    opinion = Opinion.query.get(id)
+    if opinion is None:
+        raise InvalidAPIUsage('Мнение с указанным id не найдено', 404)
+
     if 'text' in data:
         opinion_with_text = Opinion.query.filter_by(text=data['text']).first()
         if opinion_with_text is not None and opinion_with_text.id != id:
             raise InvalidAPIUsage('Такое мнение уже есть в базе данных')
 
-    opinion = Opinion.query.get_or_404(id)
     opinion.title = data.get('title', opinion.title)
     opinion.text = data.get('text', opinion.text)
     opinion.source = data.get('source', opinion.source)
@@ -63,7 +68,9 @@ def update_opinion(id):
 
 @app.route('/api/opinions/<int:id>/', methods=['DELETE'])
 def delete_opinion(id):
-    opinion = Opinion.query.get_or_404(id)
+    opinion = Opinion.query.get(id)
+    if opinion is None:
+        raise InvalidAPIUsage('Мнение с указанным id не найдено', 404)
 
     db.session.delete(opinion)
     db.session.commit()
@@ -74,4 +81,6 @@ def delete_opinion(id):
 @app.route('/api/get-random-opinion/', methods=['GET'])
 def get_random_opinion():
     opinion = random_opinion()
-    return jsonify({'opinion': opinion.to_dict()}), 200
+    if opinion is not None:
+        return jsonify({'opinion': opinion.to_dict()}), 200
+    raise InvalidAPIUsage('В базе данных нет мнений', 404)
