@@ -1,6 +1,7 @@
+import asyncio
 import json
 
-import requests
+import aiohttp
 
 from . import app
 
@@ -16,65 +17,79 @@ def get_auth_header():
     return f'Bearer {app.config["DROPBOX_TOKEN"]}'
 
 
-def upload_files_to_dropbox(images):
+async def async_upload_files_to_dropbox(images):
     urls = []
 
     if images is None:
         return urls
 
-    for image in images:
-        if not image or not image.filename:
-            continue
+    async with aiohttp.ClientSession() as session:
+        tasks = []
 
-        dropbox_args = json.dumps({
-            'autorename': True,
-            'path': f'/{image.filename}',
-        })
+        for image in images:
+            if not image or not image.filename:
+                continue
 
-        upload_response = requests.post(
-            UPLOAD_LINK,
-            headers={
-                'Authorization': get_auth_header(),
-                'Content-Type': 'application/octet-stream',
-                'Dropbox-API-Arg': dropbox_args,
-            },
-            data=image.read(),
-        )
+            tasks.append(
+                asyncio.ensure_future(
+                    upload_file_and_get_url(session, image)
+                )
+            )
 
-        upload_data = upload_response.json()
+        if tasks:
+            urls = await asyncio.gather(*tasks)
 
-        if 'path_lower' not in upload_data:
-            print('DROPBOX UPLOAD STATUS:', upload_response.status_code)
-            print('DROPBOX UPLOAD RESPONSE:', upload_response.text)
+    return urls
+
+
+async def upload_file_and_get_url(session, image):
+    dropbox_args = json.dumps({
+        'autorename': True,
+        'mode': 'add',
+        'path': f'/{image.filename}',
+    })
+
+    async with session.post(
+        UPLOAD_LINK,
+        headers={
+            'Authorization': get_auth_header(),
+            'Content-Type': 'application/octet-stream',
+            'Dropbox-API-Arg': dropbox_args,
+        },
+        data=image.read(),
+    ) as response:
+        data = await response.json()
+
+        if 'path_lower' not in data:
+            print('DROPBOX UPLOAD STATUS:', response.status)
+            print('DROPBOX UPLOAD RESPONSE:', data)
             raise RuntimeError('Не удалось загрузить файл в Dropbox')
 
-        path = upload_data['path_lower']
+        path = data['path_lower']
 
-        sharing_response = requests.post(
-            SHARING_LINK,
-            headers={
-                'Authorization': get_auth_header(),
-                'Content-Type': 'application/json',
-            },
-            json={'path': path},
-        )
+    async with session.post(
+        SHARING_LINK,
+        headers={
+            'Authorization': get_auth_header(),
+            'Content-Type': 'application/json',
+        },
+        json={'path': path},
+    ) as response:
+        data = await response.json()
 
-        sharing_data = sharing_response.json()
-
-        if 'url' not in sharing_data:
+        if 'url' not in data:
             try:
-                sharing_data = (
-                    sharing_data['error']
+                data = (
+                    data['error']
                     ['shared_link_already_exists']
                     ['metadata']
                 )
             except KeyError:
-                print('DROPBOX SHARING STATUS:', sharing_response.status_code)
-                print('DROPBOX SHARING RESPONSE:', sharing_response.text)
+                print('DROPBOX SHARING STATUS:', response.status)
+                print('DROPBOX SHARING RESPONSE:', data)
                 raise RuntimeError('Не удалось создать ссылку Dropbox')
 
-        url = sharing_data['url']
+        url = data['url']
         url = url.replace('dl=0', 'raw=1')
-        urls.append(url)
 
-    return urls
+    return url
